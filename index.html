@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CCTV  PAK PHANANG | ระบบกล้องวงจรปิดเทศบาลเมืองปากพนัง</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+<style>
+/* คง CSS เดิมทั้งหมดไว้เหมือนเดิม 100% */
+:root {
+    --primary: #0ea5e9;
+    --primary-dark: #0284c7;
+    --secondary: #64748b;
+    --bg-dark: #0f172a;
+    --bg-card: rgba(30, 41, 59, 0.95);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border: rgba(148, 163, 184, 0.2);
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --glass: rgba(15, 23, 42, 0.85);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    overflow: hidden;
+    line-height: 1.5;
+}
+
+/* Header & Clock */
+#header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(90deg, var(--bg-dark) 0%, rgba(14, 165, 233, 0.1) 100%);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 2000;
+    backdrop-filter: blur(10px);
+}
+
+#brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#brand-logo {
+    height: 40px;
+    width: auto;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    transition: transform 0.3s;
+}
+
+#brand-logo:hover {
+    transform: scale(1.05);
+}
+
+#brand-text {
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+}
+
+#clockBar {
+    font-family: 'SF Mono', monospace;
+    font-size: 14px;
+    color: var(--primary);
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(14, 165, 233, 0.3);
+}
+
+/* แผนที่ */
+#map {
+    position: absolute;
+    top: 60px;
+    bottom: 260px;
+    left: 0;
+    right: 0;
+    z-index: 1;
+}
+
+.leaflet-top.leaflet-left { display: none; }
+
+/* Custom Zoom Control */
+.leaflet-control-zoom {
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+}
+
+.leaflet-control-zoom a {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+    width: 36px !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    font-size: 18px !important;
+    transition: all 0.2s;
+}
+
+.leaflet-control-zoom a:hover {
+    background: var(--primary) !important;
+    color: white !important;
+}
+
+/* Sidebar */
+#sidebar {
+    position: absolute;
+    top: 80px;
+    left: 15px;
+    width: 340px;
+    background: var(--bg-card);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 3000;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+}
+
+#sidebar.collapsed { max-height: 56px; opacity: 0.9; }
+
+#sidebar:hover { opacity: 1; }
+
+#sideHeader {
+    padding: 16px;
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.1) 0%, transparent 100%);
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    transition: all 0.2s;
+}
+
+#sideHeader:hover {
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.2) 0%, transparent 100%);
+}
+
+#collapseIcon { transition: transform 0.3s; color: var(--primary); }
+
+#sidebar.collapsed #collapseIcon { transform: rotate(-90deg); }
+
+#searchBox {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+#searchBox input {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s;
+}
+
+#searchBox input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+}
+
+#searchBox input::placeholder { color: var(--text-secondary); }
+
+#cameraList {
+    max-height: calc(55vh - 60px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--secondary) transparent;
+}
+
+#cameraList::-webkit-scrollbar { width: 6px; }
+
+#cameraList::-webkit-scrollbar-thumb {
+    background: var(--secondary);
+    border-radius: 3px;
+}
+
+#sidebar.collapsed #searchBox,
+#sidebar.collapsed #cameraList { display: none; }
+
+.camera-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s;
+    font-size: 13px;
+}
+
+.camera-item:hover {
+    background: rgba(14, 165, 233, 0.1);
+    padding-left: 20px;
+}
+
+.camera-item::before {
+    content: "📹";
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.camera-item:hover::before { opacity: 1; }
+
+/* Map Switcher */
+.map-switcher {
+    position: absolute;
+    top: 65px;
+    right: 50px;
+    z-index: 1000;
+    background: var(--glass);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 160px;
+}
+
+.map-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+}
+
+.map-btn::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.5s;
+}
+
+.map-btn:hover::before { transform: translateX(100%); }
+
+.map-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-primary);
+    transform: translateX(-2px);
+}
+
+.map-btn.active {
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(14, 165, 233, 0.05) 100%);
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
+}
+
+.map-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.map-btn.active .map-icon { transform: scale(1.1); }
+
+.icon-satellite { background: linear-gradient(135deg, #059669 0%, #047857 100%); }
+.icon-opentopo { background: linear-gradient(135deg, #78716c 0%, #57534e 100%); }
+
+/* multiView */
+#multiView {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 290px;
+    background: linear-gradient(0deg, #0f172a, #111827);
+    display: flex;
+    gap: 15px;
+    padding: 12px;
+    overflow: hidden;
+    align-items: stretch;
+    border-top: 1px solid var(--border);
+}
+
+#multiView::-webkit-scrollbar { height: 8px; }
+
+#multiView::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
+    border-radius: 4px;
+}
+
+#multiView::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 4px;
+}
+
+.camBox {
+    width: 300px;
+    min-width: 300px;
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 12px;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+}
+
+.camBox::before {
+    content: "● LIVE";
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(239, 68, 68, 0.9);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    letter-spacing: 1px;
+    z-index: 10;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.camBox video {
+    width: 100%;
+    border-radius: 12px;
+    background: #000;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+}
+
+.camTitle {
+    font-weight: 700;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 50px;
+}
+
+.camTitle.small { font-size: 12px; }
+.camTitle.xsmall { font-size: 11px; }
+
+.cam-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.cam-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.cam-btn-capture {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+}
+
+.cam-btn-capture:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+}
+
+.cam-btn-close {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.cam-btn-close:hover { background: rgba(239, 68, 68, 0.2); }
+
+/* Popup */
+.leaflet-popup-content-wrapper {
+    background: var(--bg-card) !important;
+    border-radius: 16px !important;
+    border: 1px solid var(--border) !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4) !important;
+    backdrop-filter: blur(20px);
+}
+
+.leaflet-popup-content { margin: 16px !important; color: var(--text-primary) !important; }
+.leaflet-popup-tip { background: var(--bg-card) !important; border: 1px solid var(--border) !important; }
+
+.popup-header {
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.popup-coords {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    font-family: 'SF Mono', monospace;
+    background: rgba(0,0,0,0.3);
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.popup-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    margin: 6px 0;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.popup-btn-camera {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+}
+
+.popup-btn-camera:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+}
+
+.popup-btn-streetview {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.popup-btn-streetview:hover {
+    background: rgba(255,255,255,0.15);
+    border-color: var(--primary);
+}
+
+/* Stats Badge */
+#statsBadge {
+    position: absolute;
+    bottom: 270px;
+    right: 15px;
+    background: var(--glass);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.stat-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #header { height: 50px; }
+    #brand-logo { height: 32px; }
+    #brand-text { font-size: 14px; }
+    #sidebar { width: calc(100% - 30px); max-height: 40vh; top: 70px; }
+    .map-switcher { top: 60px; right: 10px; flex-direction: row; min-width: auto; }
+    .map-btn { padding: 8px; }
+    .map-btn span:not(.map-icon) { display: none; }
+    #map { top: 50px; }
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+    <div id="brand">
+        <img id="brand-logo" src="https://www.pakphanangcity.org/images/logo.png" alt="เทศบาลเมืองปากพนัง">
+        <span id="brand-text">ระบบ CCTV เทศบาลเมืองปากพนัง</span>
+    </div>
+    <div id="clockBar">--/--/---- --:--:--</div>
+</div>
+
+<div id="sidebar" class="collapsed">
+  <div id="sideHeader">
+    <span>📷 กล้องเทศบาลปากพนัง 40 ตัว</span>
+    <span id="collapseIcon">▼</span>
+  </div>
+  <div id="searchBox">
+    <input id="search" placeholder="🔍 ค้นหากล้อง...">
+  </div>
+  <div id="cameraList"></div>
+</div>
+
+<!-- Map Switcher Control -->
+<div class="map-switcher">
+    <button class="map-btn active" onclick="switchMap('satellite')" id="btn-satellite">
+        <span class="map-icon icon-satellite">🛰️</span>
+        <span>ดาวเทียม</span>
+    </button>
+    <button class="map-btn" onclick="switchMap('opentopo')" id="btn-opentopo">
+        <span class="map-icon icon-opentopo">⛰️</span>
+        <span>OpenTopoMap</span>
+    </button>
+</div>
+
+<!-- Stats Badge -->
+<div id="statsBadge">
+    <span class="stat-dot"></span>
+    <span id="activeCams">0 กล้องกำลังทำงาน</span>
+</div>
+
+<div id="map"></div>
+<div id="multiView"></div>
+
+<script>
+function updateClock(){
+    let d = new Date();
+    let options = {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    };
+    let t = d.toLocaleString('th-TH', options);
+    clockBar.innerText = t;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* แผนที่ */
+var map = L.map('map', {zoomControl: false}).setView([8.355, 100.200], 14);
+L.control.zoom({position: 'topright'}).addTo(map);
+
+var satelliteLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    maxZoom: 20,
+    attribution: '© Google'
+});
+
+var opentopoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    maxZoom: 17,
+    attribution: '© OpenTopoMap | © OpenStreetMap contributors'
+});
+
+satelliteLayer.addTo(map);
+var currentMap = 'satellite';
+
+function switchMap(mapType) {
+    if (mapType === currentMap) return;
+    
+    if (mapType === 'satellite') {
+        map.removeLayer(opentopoLayer);
+        satelliteLayer.addTo(map);
+        document.getElementById('btn-satellite').classList.add('active');
+        document.getElementById('btn-opentopo').classList.remove('active');
+    } else {
+        map.removeLayer(satelliteLayer);
+        opentopoLayer.addTo(map);
+        document.getElementById('btn-opentopo').classList.add('active');
+        document.getElementById('btn-satellite').classList.remove('active');
+    }
+    currentMap = mapType;
+}
+
+window.switchMap = switchMap;
+
+var camIcon = L.icon({
+    iconUrl: "https://i.ibb.co/TxG7KC9N/camera.png",
+    iconSize: [32, 32],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -14]
+});
+
+/* === กล้องใหม่ทั้งหมดจากปากพนัง (40 ตัว) === */
+var cameras = [
+    {id:1, title:"ประตูทางเข้าหน้าสนามกีฬา", lat:8.35901, lng:100.20759, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/be95e8e9-8468-42ef-1d03-14d18a9e97ae.m3u?authKey=9e679a41-34ab-4706-9366-1d309a2ee466&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenh4b2k6Y2YyNWVmYjQ0Yjg0YmFjOGI2ZDMwNzY1NmYyMmZlMzA%3D&chunked&sessionID=333626&hi"},
+    {id:2, title:"ด้านหลังสนามกีฬา (บริเวณสระว่ายน้ำ) ตัวที่ 1", lat:8.36125, lng:100.208, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/8ba70ba1-fe01-f034-1f42-cde47c03f611.m3u?authKey=74a1a14a-097c-4071-91a4-505fbabc72ab&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemxycWI6ZWU2ZjJiNzYxMmNiNjM2NDI4MDVhOTVlZDFjNjNkNDk%3D&chunked&sessionID=333640&hi"},
+    {id:3, title:"ด้านหลังสนามกีฬา (บริเวณสระว่ายน้ำ) ตัวที่ 1", lat:8.36125, lng:100.208, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/80c916ad-f8bb-d310-5e22-00eff25297e4.m3u?authKey=36bb9e51-73e7-495f-b640-84ff929e06e1&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenB3dHM6NTI2MDhhNDIxZWQ1YTQyZTVjMjRjZGZmNDVjNWI3MGY%3D&chunked&sessionID=333643&hi"},
+    {id:4, title:"หน้าที่ว่าการอำเภอปากพนัง", lat:8.3578, lng:100.20553, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/74a803f8-fe92-5777-8bae-bdfdae1873a8.m3u?authKey=414b3487-5e56-4279-ac8c-c9c8bc2704d0&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenZ0bnI6NjE3MWE0NTUxYzM4NmU3YTQ4ZTg0YjZkZjQyMDJkZmE%3D&chunked&sessionID=333645&hi"},
+    {id:5, title:"หน้าวิทยาลัยอาชีวปากพนัง", lat:8.35657, lng:100.20405, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/17939bba-c021-7f1d-bf06-52198aed91e4.m3u?authKey=5d39c951-9ab3-45b0-bb71-6150ad06f2b5&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenJob2k6YTVjOGU4NTMyN2E3YjZhZjIzZWQ3NjM3ODEzZDRlOTU%3D&chunked&sessionID=335194&hi"},
+    {id:6, title:"ตรงข้ามหน้าโรงเรียนปากพนัง", lat:8.35564, lng:100.20271, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/5b15439f-1020-7840-f856-19bd1cae8fbe.m3u?authKey=dfd0e4e5-9d89-4f0b-b9a6-dcc2d770b741&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemV2d206ZDgyM2ZlNDY0Y2UyNDczNTFlZjAwNDYzMzZjZmIzZjk%3D&chunked&sessionID=335197&hi"},
+    {id:7, title:"สามแยกโรงเรียนเทศบาลปากพนัง 1 ตัวที่ 1", lat:8.35488, lng:100.20127, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/634558e3-2b67-af01-dbc2-b1374d269b66.m3u?authKey=908a9284-3d79-4618-af36-eb8fdd407491&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemtoaWw6YjRlMzRlYjlhNjAxOWRiZDZjOWVkZjY1MzE0NzkxYTc%3D&chunked&sessionID=335200&hi"},
+    {id:8, title:"สามแยกโรงเรียนเทศบาลปากพนัง 1 ตัวที่ 2", lat:8.35488, lng:100.20127, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/1ee011ab-b83f-3b7d-f02c-0421608d5824.m3u?authKey=c1b3fad9-903d-4d25-97b3-3734ad903f8d&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemF2b2s6ZmQxNjA2MGMzZTVkNzliZThhMjE5OWNmNzU5MjI1Zjk%3D&chunked&sessionID=335202&hi"},
+    {id:9, title:"สามแยกโรงเรียนเทศบาลปากพนัง 1 ตัวที่ 3", lat:8.35488, lng:100.20127, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/87e0f1bd-49e3-5173-5d6d-76bc02142468.m3u?authKey=253de729-2a92-48d7-bd12-c9db1441d728&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemVqbHA6N2Y3YTFiZjUzYTRjMWY2MmRhZmRiMjE0MzYwZmUwNGI%3D&chunked&sessionID=335208&hi"},
+    {id:10, title:"โรงเรียนวัดรัตนาราม", lat:8.36444, lng:100.196363, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/ccb4142e-1483-7dc1-772d-81cc309e7a14.m3u?authKey=a46945c8-4e18-48e8-a0fd-c812c93a583a&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemVpd3Q6Y2M0Y2I2MzYyNjUwNWFlODA0Y2FhNDg1MmFmNGUyNjk%3D&chunked&sessionID=335222&hi"},
+    {id:11, title:"หน้าวัดรัตนาราม (บางบ่อ) ตัวที่ 1", lat:8.36311, lng:100.19458, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/bdc2ecf1-894e-3191-2e9b-54d2d88ee0e3.m3u?authKey=91d8f306-5ecb-422a-94fd-20c1cf77b835&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oem1kaGg6YTUzNjNmZjY2OWY0MTA0YWZmYjg4MzE3ZWNiNzE3ZTI%3D&chunked&sessionID=335228&hi"},
+    {id:12, title:"หน้าวัดรัตนาราม (บางบ่อ) ตัวที่ 2", lat:8.36313, lng:100.194677, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/0574f7ab-1fde-9d98-03e4-64cff469aff1.m3u?authKey=9ef86b9a-9e68-47a1-ad7e-cca699a85cbc&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenRlemE6Y2M3YzI5YzZjNTE4NTdkYzJhMzhkZDgzOTY5M2JiOGU%3D&chunked&sessionID=335231&hi"},
+    {id:13, title:"หน้ามัสยิดดารุ้ลนาอีม", lat:8.36104, lng:100.1957, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/d315595a-2b51-e6a3-b306-b089f19fd7de.m3u?authKey=4a5faa10-e8db-4f8a-887f-eb30de633c04&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemx5b3k6NDE3MGE2ZTQ5YWY3MzM5MWJlYjRmMTcxMDBiYmM2NjI%3D&chunked&sessionID=335233&hi"},
+    {id:14, title:"หน้าโรงพยาบาลปากพนัง ตัวที่ 1", lat:8.35826, lng:100.19756, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/21ed5d14-3c0d-7711-73f9-4240e9702a77.m3u?authKey=5203188a-c2fe-4e43-bab9-b4abb53cbae7&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemxvZ2g6ZDhjOTVjMjgwY2E2ZTI3ODE0ZmNjZWE5NjcyOTA2NWU%3D&chunked&sessionID=335239&hi"},
+    {id:15, title:"หน้าโรงพยาบาลปากพนัง ตัวที่ 2", lat:8.35826, lng:100.19756, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/75452d18-dfd5-664f-f04b-c8ae684b5bb1.m3u?authKey=b54a19be-81ee-4f6d-99da-9e5b8a9a5079&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemV0bGg6ZGEwYTFjYmUwYjdkN2I3M2E3MTZmMGM0N2IxNTE3NDk%3D&chunked&sessionID=335242&hi"},
+    {id:16, title:"คอสะพานตลาดย้อนยุค ตัวที่ 1", lat:8.35538, lng:100.19906, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/34a18fd0-c131-c388-fd55-6ef41e2c8556.m3u?authKey=e7942cf4-c68b-4f74-b187-9e8ec43525ab&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemt4ZWE6Nzc4Mjk4ZjY2ZGFlYTgyNjc5Y2RhOTNkZjA2Y2I5MGI%3D&chunked&sessionID=335246&hi"},
+    {id:17, title:"คอสะพานตลาดย้อนยุค ตัวที่ 2", lat:8.35538, lng:100.19906, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/563412c5-ed64-3781-0d3d-fad23b823aa9.m3u?authKey=b97112f8-f445-40e1-9f40-d85fdb041e60&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oendlbXk6ZmVhMWFkNTM4ZmIwZjZhZGQ2OGUwYzIyY2YxMzAyNTI%3D&chunked&sessionID=335248&hi"},
+    {id:18, title:"ศาลาประชาสันต์ ตัวที่ 1", lat:8.35441, lng:100.1992, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/cc392533-5160-1ffe-c283-fa6969e41c14.m3u?authKey=26c5fc07-c72f-4035-be3b-fca3c2221b3a&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemZhdWo6ZGQxMmQyZTA2NGU1NWRkMzlmZWMwNjIzOTBmMjk4NzE%3D&chunked&sessionID=335250&hi"},
+    {id:19, title:"ศาลาประชาสันต์ ตัวที่ 2", lat:8.35441, lng:100.1992, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/caedb101-ec3f-95f0-cf99-3a7d38aaf581.m3u?authKey=11342d76-6f66-4c47-b0c1-32d5aa2f768c&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenVteGk6NGY1YmEwZjY4NjRiY2NjNTkwOTNjYzc5OWY0N2Y0NTI%3D&chunked&sessionID=335251&hi"},
+    {id:20, title:"ศาลาประชาสันต์ ตัวที่ 3", lat:8.35441, lng:100.1992, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/52b27ceb-da05-c9d9-a0d9-0f53da667aeb.m3u?authKey=ab4c8009-6f85-41ac-bac7-7d1896b1d084&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenhwYm06NjViMDc3ZWE2NzFlYjBlZTQ1YTg1NDNjYTVkOGIyNGQ%3D&chunked&sessionID=335252&hi"},
+    {id:21, title:"หน้าสำนักงานเทศบาลเมืองปากพนัง", lat:8.35384, lng:100.20165, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/9d47a11e-6252-a0fa-2b89-047f5eaf56f3.m3u?authKey=486f4f71-b16b-453f-90ab-f2cac5bdf91c&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenpzdXE6MzM5ZjU2NjRhZGY5NWZjOGQ2MGM5NTdhNjgxZThhNTc%3D&chunked&sessionID=335254&hi"},
+    {id:22, title:"โรงเรียนเทศบาลปากพนัง 2 ตัวที่ 1", lat:8.35176, lng:100.20175, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/f6315cdc-6c6a-e13f-8849-c4022c6c42f8.m3u?authKey=0897b740-328a-4a7c-9683-7035eae67cc4&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemhrb3I6MzcwYWY1YjVhMjI4MDFlZDkzYjk1NDJjYTc1NWRmOTY%3D&chunked&sessionID=335255&hi"},
+    {id:23, title:"โรงเรียนเทศบาลปากพนัง 2 ตัวที่ 2", lat:8.35176, lng:100.20175, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/17d1ca8a-ca6e-8cfa-8d3b-d92a17371b24.m3u?authKey=b9cc1be6-9aec-48d1-849a-77dac5281386&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenNvZHc6ODg0ODVkNjRkZTJkY2NlNTFlNjllMTkwNTAwOTNhYzk%3D&chunked&sessionID=335260&hi"},
+    {id:24, title:"ปากซอยเจริญวิทย์ (ฝั่งถนนชายน้ำ)", lat:8.35187, lng:100.19963, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/6c6758f3-05f6-36cf-7e27-3a8b0821f90f.m3u?authKey=74eca0c4-48de-41af-9ea5-bf3b414ca8b6&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenVlcW06NWJjNTg1OThiNTFkMTM3NDlhYWFkMTI0ZTgwNDRiYTI%3D&chunked&sessionID=335262&hi"},
+    {id:25, title:"หน้าธนาคารกรุงไทย (ตรงข้ามธนาคารออมสิน)", lat:8.3502, lng:100.19945, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/4a7aaf81-8cbc-d571-77d7-5b2bb773063f.m3u?authKey=55770e0b-c6f8-42c1-8916-05b18c4aa2c0&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenJhZWw6NmY1M2UzZDNlMzc5YzAwZGJkNGQyYTkxM2EwMTYxMWE%3D&chunked&sessionID=335263&hi"},
+    {id:26, title:"ปากซอยพิศาล (ฝั่งถนนชายน้ำ)", lat:8.34941, lng:100.19941, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/6bdf1d79-3cee-1678-8f7e-d6bdc2d132c6.m3u?authKey=330f5ff3-26c8-4136-b57e-41ca78fdad3c&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenpmZm46ZTEzNzhiY2Q0ZWQ3ZDdlMGY3NjJmNzAxMzAyZmRjNjg%3D&chunked&sessionID=335265&hi"},
+    {id:27, title:"สี่แยกเชอรี่โฟโต้", lat:8.3471, lng:100.20007, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/01c3e1f3-f643-29f1-2a87-1331bdf66f2a.m3u?authKey=3d5b9e74-0f25-4d03-aad4-416f2171fba1&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenZtemw6ODg4NWFmYWE4ZDk5ZWI3MGVkZjY1MjA2ODhkZWE5NzQ%3D&chunked&sessionID=334379&hi"},
+    {id:28, title:"คอสะพานบางงำ", lat:8.34686, lng:100.19999, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/a6abc92c-2146-3c6c-78ac-c6ba58787692.m3u?authKey=6160578b-6d81-49c8-8a0b-531523a78fbd&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemxpYWo6Y2EyMWZkZWFkNzg2OTI1NzRmYTU0MGI5NTg0MGMxOGY%3D&chunked&sessionID=334405&hi"},
+    {id:29, title:"สี่แยกประปา", lat:8.34691, lng:100.20162, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/f7f00186-95b8-cfaf-ef45-953c9e80aec0.m3u?authKey=1b65db8d-b3d5-416d-9543-af33f01bdfba&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenN4ZXo6ODU5NWRmZWRhNGU3OTRiZjNkNWFlZmQyMzg2Mzk2NjM%3D&chunked&sessionID=334482&hi"},
+    {id:30, title:"สามแยกหน้าโรงเรียนเทศบาลวัดรามประดิษฐ์", lat:8.3404, lng:100.20078, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/82696654-ff5b-52ff-d8d4-66e3d789ccd9.m3u?authKey=f5fd85af-9d95-4463-92ed-6c4461c86dfd&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemticWI6ZDNhMjhhZTJhMDBiMmE1NDY5YTkxNTNmOTYzYTI0ZjQ%3D&chunked&sessionID=335271&hi"},
+    {id:31, title:"สามแยกถนนพัฒนาการหลังโทรศัพท์ (ข้างเมรุวัดรามประดิษฐ์)", lat:8.34078, lng:100.20226, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/e5601327-8c34-8946-2563-82f15590babe.m3u?authKey=14fe8385-6972-4ef0-a056-2e0c47bcb71f&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenZ1bGU6YjcxNjNlZGJlMTk0NzQyYTU0YTBkOGVmZmQ2YTlhOGQ%3D&chunked&sessionID=335273&hi"},
+    {id:32, title:"สามแยกไหหลำ", lat:8.34526, lng:100.20144, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/17939bba-c021-7f1d-bf06-52198aed91e4.m3u?authKey=dccda7b3-71dd-4ddf-9875-21076261eb19&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenVxaHE6OWIyNzA4NTU1ZDQ2YmY4NzAxMjU2NGI5ZWU2MjIwNGY%3D&chunked&sessionID=333648&hi"},
+    {id:33, title:"สี่แยกแพรกจูด", lat:8.34338, lng:100.20791, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/740a720b-77b6-62d6-be67-e8ea518c6976.m3u?authKey=5db18af1-165d-44ef-a4d2-e110e6c6d508&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenlpZW06Y2U0ZTIwZWNiZmVhZjUxYTJhOTAyOTNlOTE0NDRlMzg%3D&chunked&sessionID=67846&hi"},
+    {id:34, title:"ป้อมตำรวจปากพนัง (บริเวณวงเวียน)", lat:8.34658, lng:100.19681, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/51e06d36-a2b8-5112-dcfc-50630e737da8.m3u?authKey=0f55d7f2-e0a2-423c-9b67-52c5c75f1981&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenJjY3I6ZTNlNTgyMWE5MjAwOGQ4MzllYjQ5OGYyMDgyOGZjN2Y%3D&chunked&sessionID=67485&hi"},
+    {id:35, title:"ทางเข้าโรงเรียนเทศบาลวัดนาควารี", lat:8.34635, lng:100.19466, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/7047a863-9280-d8a4-edff-1f90d67c4852.m3u?authKey=4ff1ffa3-53a9-432d-b6dc-655ff1fa1b2a&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenh1Y286YTdiZWE2YWMzMDg3ZjM2MmVlN2ExNTJmNWIwNjA5OWY%3D&chunked&sessionID=67833&hi"},
+    {id:36, title:"หน้าโรงเรียนทักษิณอาชีวระ", lat:8.3452, lng:100.1913, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/54800dbf-ae92-b0e5-a0da-f3bc3ce5d722.m3u?authKey=87ef3ce6-528d-43f2-a725-65ca0691678c&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oem93aGs6OTI1MWM5YmI4NzlhOWZiZWVkYzNiMDc3ODJhZDg2MGU%3D&chunked&sessionID=67837&hi"},
+    {id:37, title:"หน้าโรงเรียนภูมิสถิตวิทยา", lat:8.34486, lng:100.1888, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/5b1da33a-6003-ba25-080c-58729d092aff.m3u?authKey=38492a08-7b92-4721-b2ef-af1978691ac9&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oemp4bnY6NDIyNWUwNjk0MWIwYjkxMDEzN2E0NWRiZmM4OWVjNmQ%3D&chunked&sessionID=67839&hi"},
+    {id:38, title:"ถนนบางทวด (ปากทางเข้า)", lat:8.35069, lng:100.19688, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/ff17273c-da95-bacf-61f1-ecbdae70a19a.m3u?authKey=8999afa0-0262-47c9-8664-7bad868c592f&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenp2aWs6MTZmYmQ3YmEzMzM0ZDU0Mjg2NjEwNGU3ZjgxNmQyNTk%3D&chunked&sessionID=67842&hi"},
+    {id:39, title:"จุดจอดรถโดยสารอำเภอปากพนัง (หัวถนน) หน้าร้านอภิญญาเภสัช", lat:8.34695, lng:100.197, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/7b7994d2-8010-e945-e109-0ffef31a1f89.m3u?authKey=0b53a827-682c-4a54-988f-b3ab0383ca3d&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oempjeG06MjRjNzhhOTA4ZGY0ZDY3YTRhZDRlYzIzMjZkY2RlNTY%3D&chunked&sessionID=67843&hi"},
+    {id:40, title:"ปากซอยคริสตจักรปากพนัง (ตรงข้ามซอยด่านภาษี)", lat:8.35986, lng:100.19815, stream:"https://app:cctv84000@cctv.pakphanangcity.org:7001/hls/4fb7e812-0d4c-a1d1-9c6f-c65f640aff1f.m3u?authKey=23ff2f39-7611-4a70-952f-c989f4ecab16&hi=true&resolution=320p&auth=YXBwOnNwdGFQQ3VodmRWZ1loUG9Fc2d0VU0wUkthQVhkND1oenVtbng6NTA3YTI4M2JhYjU1ZjkyMTMzNTZlZWY4ZWIzYjUwZDg%3D&chunked&sessionID=335280&hi"}
+];
+var listDiv = document.getElementById("cameraList");
+var multi = document.getElementById("multiView");
+var activeCameras = 0;
+
+function updateStats() {
+    document.getElementById('activeCams').textContent = activeCameras + " กล้องกำลังทำงาน";
+}
+
+function playStream(v, url){
+    if(Hls.isSupported()){
+        let h = new Hls();
+        h.loadSource(url);
+        h.attachMedia(v);
+    } else {
+        v.src = url;
+    }
+}
+
+function openStreetView(lat, lng, title) {
+    const directUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+    window.open(directUrl, '_blank', 'width=800,height=600');
+}
+
+cameras.forEach(cam => {
+    let m = L.marker([cam.lat, cam.lng], {icon: camIcon}).addTo(map)
+    .bindPopup(`
+        <div class="popup-header">${cam.title}</div>
+        <div class="popup-coords">
+            📍 ${cam.lat.toFixed(6)}, ${cam.lng.toFixed(6)}
+        </div>
+        <button onclick="addMulti('${cam.title}','${cam.stream}')" class="popup-btn popup-btn-camera">
+            📹 เปิดกล้อง
+        </button>
+        <button onclick="openStreetView(${cam.lat}, ${cam.lng}, '${cam.title}')" class="popup-btn popup-btn-streetview">
+            🌏 ดูสตรีทวิว
+        </button>
+    `);
+
+    let item = document.createElement("div");
+    item.className = "camera-item";
+    item.textContent = cam.title;
+    item.onclick = () => {
+        map.setView([cam.lat, cam.lng], 17);
+        m.openPopup();
+    };
+    listDiv.appendChild(item);
+});
+
+window.addMulti = (title, stream) => {
+    const existing = [...multi.children].find(box => 
+        box.querySelector('.camTitle').textContent === title
+    );
+    if (existing) {
+        existing.scrollIntoView({behavior: 'smooth'});
+        return;
+    }
+
+    let box = document.createElement("div");
+    box.className = "camBox";
+
+    let t = document.createElement("div");
+    t.className = "camTitle";
+    t.textContent = title;
+    if(title.length > 28) t.classList.add("small");
+    if(title.length > 40) t.classList.add("xsmall");
+    box.appendChild(t);
+
+    let v = document.createElement("video");
+    v.autoplay = true;
+    v.muted = true;
+    v.controls = true;
+    v.playsInline = true;
+    box.appendChild(v);
+    
+    playStream(v, stream);
+    
+    activeCameras++;
+    updateStats();
+
+    let controls = document.createElement("div");
+    controls.className = "cam-controls";
+
+    let cap = document.createElement("button");
+    cap.className = "cam-btn cam-btn-capture";
+    cap.innerHTML = "📸 จับภาพ";
+    cap.onclick = () => {
+        let c = document.createElement("canvas");
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext("2d").drawImage(v, 0, 0);
+        let a = document.createElement("a");
+        let timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.href = c.toDataURL();
+        a.download = `capture-${title}-${timestamp}.png`;
+        a.click();
+    };
+    controls.appendChild(cap);
+
+    let close = document.createElement("button");
+    close.className = "cam-btn cam-btn-close";
+    close.innerHTML = "✕ ปิด";
+    close.onclick = () => {
+        box.remove();
+        activeCameras--;
+        updateStats();
+    };
+    controls.appendChild(close);
+
+    box.appendChild(controls);
+    multi.appendChild(box);
+    box.scrollIntoView({behavior: 'smooth'});
+};
+
+window.openStreetView = openStreetView;
+
+search.oninput = e => {
+    let t = e.target.value.toLowerCase();
+    [...listDiv.children].forEach(d => {
+        d.style.display = d.textContent.toLowerCase().includes(t) ? "flex" : "none";
+    });
+};
+
+sideHeader.onclick = () => sidebar.classList.toggle("collapsed");
+</script>
+</body>
+</html>
